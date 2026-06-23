@@ -53,8 +53,8 @@ INCLUDE_CHILDREN = os.getenv("LEAFLINK_INCLUDE_CHILDREN", "line_items")
 HOME_STATE = os.getenv("LEAFLINK_HOME_STATE", "MI").strip()
 
 # Keep only orders on/after this date (matched against created_on). Blank = no floor.
-# Set low to pull ALL historical data from the start (MI adult-use began Dec 2019).
-FROM_DATE = os.getenv("LEAFLINK_FROM_DATE", "2020-01-01")
+# Data window floor (matched against created_on). Set to Jan 2025 per client request.
+FROM_DATE = os.getenv("LEAFLINK_FROM_DATE", "2025-01-01")
 
 # Incremental mode. When > 0 AND the committed data was already backfilled at the
 # current FROM_DATE, each run pulls only the last N days and MERGES into the
