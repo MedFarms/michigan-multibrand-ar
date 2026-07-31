@@ -1368,6 +1368,7 @@ function ARDashboard({
         m[id] = {
           id,
           invoice: r.order_number || id,
+          order_uid: r.order_uid || null,
           buyer: r.buyer_name || '—',
           rep: r._rep,
           scope: r._bucket,
@@ -1772,7 +1773,13 @@ function ARDashboard({
     style: {
       color: 'var(--accent)'
     }
-  }, o.invoice), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", {
+  }, o.order_uid ? /*#__PURE__*/React.createElement("a", {
+    href: 'https://app.leaflink.com/c/3843-Euclid/orders/' + o.order_uid + '/summary/',
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: { color: 'var(--accent)', textDecoration: 'none', borderBottom: '1px dotted var(--accent)' },
+    title: "Open order in LeafLink"
+  }, o.invoice) : o.invoice), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", {
     className: "dim"
   }, o.rep), /*#__PURE__*/React.createElement("td", null, o.brands.map((b, j) => /*#__PURE__*/React.createElement("span", {
     key: j,
