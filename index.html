@@ -1378,7 +1378,10 @@ function ARDashboard({
           days,
           status: r.payment_status || 'Unpaid',
           brands: new Set(),
-          outstanding: 0
+          outstanding: 0,
+          originalAmount: +r.order_total || 0,
+          paymentBalance: +r.payment_balance || 0,
+          credits: +r.credits || 0
         };
       }
       r._primaries.forEach(b => m[id].brands.add(b));
@@ -1766,6 +1769,12 @@ function ARDashboard({
     className: "num"
   }, "Days Past"), /*#__PURE__*/React.createElement("th", null, "Aging"), /*#__PURE__*/React.createElement("th", {
     className: "num"
+  }, "Original"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Payments"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Remaining"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
   }, "Outstanding"))), /*#__PURE__*/React.createElement("tbody", null, invPager.slice.map((o, i) => /*#__PURE__*/React.createElement("tr", {
     key: i
   }, /*#__PURE__*/React.createElement("td", {
@@ -1804,6 +1813,12 @@ function ARDashboard({
       borderColor: o.bucket.color
     }
   }, o.bucket.label)), /*#__PURE__*/React.createElement("td", {
+    className: "num dim"
+  }, fmtMoneyFull(o.originalAmount)), /*#__PURE__*/React.createElement("td", {
+    className: "num dim"
+  }, fmtMoneyFull(Math.max(0, o.originalAmount - o.paymentBalance))), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.paymentBalance))), /*#__PURE__*/React.createElement("td", {
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.outstanding)))))))), /*#__PURE__*/React.createElement(Pager, {
     pager: invPager
