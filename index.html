@@ -661,6 +661,9 @@ const QUICK_RANGES = [{
   key: 'today',
   label: 'Today'
 }, {
+  key: 'yesterday',
+  label: 'Yesterday'
+}, {
   key: 'week',
   label: 'Last week'
 }, {
@@ -684,6 +687,10 @@ const quickRangeDates = key => {
   if (key === 'today') return {
     from: to,
     to
+  };
+  if (key === 'yesterday') return {
+    from: back(1),
+    to: back(1)
   };
   if (key === 'week') return {
     from: back(7),
@@ -1789,14 +1796,8 @@ function ARDashboard({
   })))))), /*#__PURE__*/React.createElement("section", {
     className: "section"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "section-header"
-  }, /*#__PURE__*/React.createElement("h2", {
-    className: "section-title"
-  }, "Open ", /*#__PURE__*/React.createElement("em", null, "invoices")), /*#__PURE__*/React.createElement("div", {
-    style: { display: 'flex', alignItems: 'center', gap: 12 }
-  }, /*#__PURE__*/React.createElement("span", {
-    className: "section-meta"
-  }, fmtNum(filtered.length) + ' invoices \u00b7 oldest first'), /*#__PURE__*/React.createElement(DownloadBtn, {
+    style: { display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }
+  }, /*#__PURE__*/React.createElement(DownloadBtn, {
     onClick: () => exportCSV('open-invoices.csv', [
       { key: 'invoice', label: 'Invoice #' },
       { key: 'buyer', label: 'Buyer' },
@@ -1812,6 +1813,14 @@ function ARDashboard({
       { key: 'outstanding', label: 'Outstanding', fmt: v => (+v || 0).toFixed(2) }
     ], sorted)
   })), /*#__PURE__*/React.createElement("div", {
+    className: "section-header"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "section-title"
+  }, "Open ", /*#__PURE__*/React.createElement("em", null, "invoices")), /*#__PURE__*/React.createElement("div", {
+    style: { display: 'flex', alignItems: 'center', gap: 12 }
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "section-meta"
+  }, fmtNum(filtered.length) + ' invoices \u00b7 oldest first'))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 0,
@@ -1878,7 +1887,7 @@ function ARDashboard({
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.outstanding)))))))), /*#__PURE__*/React.createElement(Pager, {
     pager: invPager
-  })))), /*#__PURE__*/React.createElement(StickyFooter, {
+  }))), /*#__PURE__*/React.createElement(StickyFooter, {
     nav: NAV,
     active: ACTIVE,
     brands: distinct.brands,
