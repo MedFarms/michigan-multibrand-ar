@@ -655,6 +655,19 @@ def flatten(orders, brand_q, from_date="", seller_id="", enrich=None, inv=None, 
         if order_total is not None:
             recon_order_total += order_total
 
+        # Credits applied to the order and the outstanding payment balance.
+        # Both come straight off the LeafLink order object (same {amount,currency}
+        # or bare-number shape as total). Absent -> 0.0 rather than None, since
+        # these are money totals the dashboard sums; a missing value means zero,
+        # not unknown. NOTE: payment_balance is all-or-nothing on this account
+        # (full total when unpaid, 0 when paid) — LeafLink records no partials.
+        order_credits = _amount(o.get("credits"))
+        if order_credits is None:
+            order_credits = 0.0
+        payment_balance = _amount(o.get("payment_balance"))
+        if payment_balance is None:
+            payment_balance = 0.0
+
         # Enrich: assigned sales rep / state / license from the customers endpoint,
         # joined by customer id first, then normalized buyer name.
         _cid, _cnm = _order_customer_keys(o)
@@ -689,6 +702,8 @@ def flatten(orders, brand_q, from_date="", seller_id="", enrich=None, inv=None, 
             "paid": bool(o.get("paid")),
             "payment_term": o.get("payment_term") or "",
             "order_total": order_total,
+            "credits": order_credits,
+            "payment_balance": payment_balance,
         }
 
         # Pass 1: parse every line, compute gross, and the order's gross subtotal.
