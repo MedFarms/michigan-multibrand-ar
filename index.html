@@ -2000,8 +2000,7 @@ function ARDashboard({
       { key: o => o.bucket && o.bucket.label, label: 'Aging' },
       { key: 'originalAmount', label: 'Original', fmt: v => (+v || 0).toFixed(2) },
       { key: o => Math.max(0, (o.originalAmount || 0) - (o.paymentBalance || 0)), label: 'Payments', fmt: v => (+v || 0).toFixed(2) },
-      { key: 'paymentBalance', label: 'Remaining', fmt: v => (+v || 0).toFixed(2) },
-      { key: 'outstanding', label: 'Outstanding', fmt: v => (+v || 0).toFixed(2) }
+      { key: 'paymentBalance', label: 'Remaining', fmt: v => (+v || 0).toFixed(2) }
     ], sorted)
   })), /*#__PURE__*/React.createElement("div", {
     className: "section-header"
@@ -2032,9 +2031,7 @@ function ARDashboard({
     className: "num"
   }, "Payments"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Remaining"), /*#__PURE__*/React.createElement("th", {
-    className: "num"
-  }, "Outstanding"))), /*#__PURE__*/React.createElement("tbody", null, invPager.slice.map((o, i) => /*#__PURE__*/React.createElement("tr", {
+  }, "Remaining"))), /*#__PURE__*/React.createElement("tbody", null, invPager.slice.map((o, i) => /*#__PURE__*/React.createElement("tr", {
     key: i
   }, /*#__PURE__*/React.createElement("td", {
     className: "font-mono",
@@ -2074,9 +2071,7 @@ function ARDashboard({
     className: "num dim"
   }, fmtMoneyFull(Math.max(0, o.originalAmount - o.paymentBalance))), /*#__PURE__*/React.createElement("td", {
     className: "num"
-  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.paymentBalance))), /*#__PURE__*/React.createElement("td", {
-    className: "num"
-  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.outstanding)))))))), /*#__PURE__*/React.createElement(Pager, {
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.paymentBalance)))))))), /*#__PURE__*/React.createElement(Pager, {
     pager: invPager
   }))), /*#__PURE__*/React.createElement(StickyFooter, {
     nav: NAV,
