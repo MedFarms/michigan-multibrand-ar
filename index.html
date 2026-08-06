@@ -143,16 +143,21 @@
   .quick-pill.active { background: rgba(124,58,237,0.12); border-color: var(--accent-dim); color: var(--accent); }
 
   /* Scope cards */
-  .scope-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 30px; }
+  .scope-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 30px; }
   .scope-card { text-align: left; background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; transition: transform 0.2s var(--ease), border-color 0.2s var(--ease), background 0.2s var(--ease), box-shadow 0.2s var(--ease); }
   .scope-card:hover { border-color: var(--text-dim); background: var(--bg-elev-2); transform: translateY(-2px); }
   .scope-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .scope-card.scope-internal.active { border-color: var(--internal); box-shadow: inset 0 0 0 1px var(--internal); }
+  /* Exempted accounts — carved out of External/Internal, added back into Total
+     so the Total card reconciles with LeafLink's own reports. */
+  .scope-card.scope-excluded.active { border-color: var(--rose); box-shadow: inset 0 0 0 1px var(--rose); }
   .scope-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-faint); }
-  .scope-value { font-family: 'Fraunces', serif; font-size: 30px; line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums; }
+  .scope-value { font-family: 'Fraunces', serif; font-size: 30px; line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   .scope-card.active .scope-value { color: var(--accent); }
   .scope-card.scope-internal.active .scope-value { color: var(--internal); }
+  .scope-card.scope-excluded.active .scope-value { color: var(--rose); }
   .scope-sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); }
+  @media (max-width: 1400px) { .scope-cards { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 1100px) { .scope-cards { grid-template-columns: 1fr; } }
 
   /* Filter bar */
@@ -405,8 +410,11 @@
 .scope-cards { gap: 16px; margin-bottom: 30px; }
 .scope-card { padding: 26px 28px; min-height: 132px; justify-content: center; gap: 10px; }
 .scope-label { font-size: 12px; letter-spacing: 0.16em; }
-.scope-value { font-size: 46px; line-height: 1.0; }
-@media (max-width: 1100px) { .scope-value { font-size: 38px; } }
+/* Full, unrounded figures are much longer than the abbreviated ones, so the
+   display size drops to keep them on one line inside a quarter-width card. */
+.scope-value { font-size: 27px; line-height: 1.12; letter-spacing: -0.02em; }
+@media (max-width: 1400px) { .scope-value { font-size: 30px; } }
+@media (max-width: 1100px) { .scope-value { font-size: 34px; } }
 
 /* Reset button — make it pop */
 .filter-reset-lg {
@@ -445,7 +453,7 @@
 /* --- revision: centered + larger card numbers, maximize card space --- */
 .kpi { align-items: center; text-align: center; justify-content: center; min-height: 124px; gap: 9px; padding: 24px 18px; }
 .kpi-label { text-align: center; }
-.kpi-value { font-size: 44px; line-height: 1.04; overflow-wrap: anywhere; }
+.kpi-value { font-size: 31px; line-height: 1.12; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .kpi-sub { text-align: center; font-size: 14px; }
 
 .scope-card { align-items: center; text-align: center; justify-content: center; min-height: 148px; }
@@ -474,6 +482,14 @@
   padding:10px 16px; margin-bottom:16px; font-size:13px; }
 .focus-clear { font-family:'JetBrains Mono',monospace; font-size:11px; padding:5px 12px; background:var(--accent);
   color:#fff; border:none; border-radius:999px; cursor:pointer; letter-spacing:.06em; }
+
+/* Header back-to-hub link — same destination as the sticky footer, so the
+   page can be left from the top without scrolling to the bottom first. */
+.tb-back { display:inline-flex; align-items:center; padding:6px 13px; border-radius:999px;
+  border:1px solid var(--accent); color:var(--text-on-bg); text-decoration:none; font-weight:600;
+  font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.06em; white-space:nowrap;
+  transition:background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease); }
+.tb-back:hover { background:var(--accent-deep); color:#fff; border-color:var(--accent); }
 
 /* Sticky-footer back-to-hub link */
 .bn-back { color: var(--text); border-color: var(--accent); font-weight: 600; }
@@ -1033,7 +1049,10 @@ function Topbar({
     }
   }, section))), /*#__PURE__*/React.createElement("div", {
     className: "topbar-meta"
-  }, right, ago != null && /*#__PURE__*/React.createElement("span", null, "Updated ", ago < 1 ? 'just now' : ago + 'm ago'), /*#__PURE__*/React.createElement("span", {
+  }, /*#__PURE__*/React.createElement("a", {
+    href: "/",
+    className: "tb-back"
+  }, "\u2190 Back to main page"), right, ago != null && /*#__PURE__*/React.createElement("span", null, "Updated ", ago < 1 ? 'just now' : ago + 'm ago'), /*#__PURE__*/React.createElement("span", {
     className: "pulse"
   })));
 }
@@ -1142,7 +1161,7 @@ function Empty({
   }, /*#__PURE__*/React.createElement("h2", null, title), children);
 }
 
-/* ---- Scope cards (External / Internal / Total) ---------------------- */
+/* ---- Scope cards (External / Internal / Exempted / Total) ----------- */
 function ScopeCards({
   scope,
   setScope,
@@ -1150,21 +1169,26 @@ function ScopeCards({
   fmt,
   sub
 }) {
-  const f = fmt || fmtMoney;
-  const items = [['external', 'External'], ['internal', 'Internal'], ['total', 'Total']];
+  const f = fmt || fmtMoneyFull;
+  const items = [['external', 'External'], ['internal', 'Internal'], ['excluded', 'Exempted stores'], ['total', 'Total']];
   return /*#__PURE__*/React.createElement("div", {
     className: "scope-cards"
-  }, items.map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+  }, items.map(([k, l]) => {
+    // The exempted card names the accounts it covers, so nobody has to guess
+    // which stores are carved out of External and Internal.
+    const cardSub = k === 'excluded' ? EXCLUDE_ACCOUNTS.join(' \u00b7 ') : sub;
+    return /*#__PURE__*/React.createElement("button", {
     key: k,
-    className: 'scope-card' + (k === 'internal' ? ' scope-internal' : '') + (scope === k ? ' active' : ''),
+    className: 'scope-card' + (k === 'internal' ? ' scope-internal' : k === 'excluded' ? ' scope-excluded' : '') + (scope === k ? ' active' : ''),
     onClick: () => setScope(k)
   }, /*#__PURE__*/React.createElement("div", {
     className: "scope-label"
   }, l), /*#__PURE__*/React.createElement("div", {
     className: "scope-value tabular"
-  }, f(values[k] || 0)), sub && /*#__PURE__*/React.createElement("div", {
+  }, f(values[k] || 0)), cardSub && /*#__PURE__*/React.createElement("div", {
     className: "scope-sub"
-  }, sub))));
+  }, cardSub));
+  }));
 }
 
 /* ---- Colored brand filter buttons ----------------------------------- */
@@ -1447,7 +1471,7 @@ function StickyFooter({
   })), /*#__PURE__*/React.createElement("div", {
     className: "sf-nav"
   }, /*#__PURE__*/React.createElement("a", {
-    href: "https://medfarms.analyticshub.workers.dev/",
+    href: "/",
     className: "bn-tab bn-back"
   }, "\u2190 Back to main page")));
 }
@@ -1601,7 +1625,9 @@ function ARDashboard({
   const allInvoices = useMemo(() => {
     const m = {};
     normalized.forEach(r => {
-      if (r._bucket === 'excluded' || r._excludedStatus || r.paid === true) return;
+      // Exempted accounts are kept so the Exempted card can total them and the
+      // Total card can reconcile with LeafLink. Scope filtering still applies.
+      if (r._excludedStatus || r.paid === true) return;
       if (r._date && ymd(r._date) < AR_FROM_FLOOR) return;
       const id = r._id;
       if (!id) return;
@@ -1637,7 +1663,7 @@ function ARDashboard({
       bucket: agingBucket(o.days)
     }));
   }, [normalized, asOf]);
-  const inScope = o => scope === 'total' ? o.scope === 'wholesale' || o.scope === 'internal' : scope === 'external' ? o.scope === 'wholesale' : o.scope === 'internal';
+  const inScope = o => scope === 'total' ? o.scope === 'wholesale' || o.scope === 'internal' || o.scope === 'excluded' : scope === 'external' ? o.scope === 'wholesale' : scope === 'excluded' ? o.scope === 'excluded' : o.scope === 'internal';
 
   // scope card values (respect every filter except scope)
   const preScope = useMemo(() => allInvoices.filter(o => {
@@ -1650,14 +1676,18 @@ function ARDashboard({
   }), [allInvoices, filters]);
   const scopeValues = useMemo(() => {
     let e = 0,
-      i = 0;
+      i = 0,
+      x = 0;
     preScope.forEach(o => {
-      if (o.scope === 'wholesale') e += o.outstanding;else if (o.scope === 'internal') i += o.outstanding;
+      if (o.scope === 'wholesale') e += o.outstanding;else if (o.scope === 'internal') i += o.outstanding;else if (o.scope === 'excluded') x += o.outstanding;
     });
     return {
       external: e,
       internal: i,
-      total: e + i
+      excluded: x,
+      // Total now includes the exempted accounts so it ties out against
+      // LeafLink's own reports, which have no concept of the carve-out.
+      total: e + i + x
     };
   }, [preScope]);
   const filtered = useMemo(() => preScope.filter(inScope), [preScope, scope]);
@@ -1857,7 +1887,7 @@ function ARDashboard({
     }
   }, /*#__PURE__*/React.createElement(Kpi, {
     label: "Total Outstanding",
-    value: fmtMoney(totals.total),
+    value: fmtMoneyFull(totals.total),
     sub: fmtNum(totals.count) + ' invoices',
     accent: true
   }), AGING.map(b => /*#__PURE__*/React.createElement("button", {
@@ -1877,7 +1907,7 @@ function ARDashboard({
     style: {
       fontSize: 26
     }
-  }, fmtMoney(totals[b.key])), /*#__PURE__*/React.createElement("div", {
+  }, fmtMoneyFull(totals[b.key])), /*#__PURE__*/React.createElement("div", {
     className: "kpi-sub"
   }, totals.total ? (totals[b.key] / totals.total * 100).toFixed(1) + '% of AR' : '—')))), /*#__PURE__*/React.createElement("section", {
     className: "section"
