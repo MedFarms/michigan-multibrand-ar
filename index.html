@@ -1636,6 +1636,8 @@ function App() {
   } = useData('https://raw.githubusercontent.com/MedFarms/michigan-multibrand-ar/main/sales_data.json.gz');
   const [scope, setScope] = useState('total');
   const [grouping, setGrouping] = useState('month');
+  // Active-credits view: all | unapplied | applied
+  const [creditView, setCreditView] = useState('all');
   const [filters, setFilters] = useState({
     rep: '',
     buyer: [],
@@ -1663,6 +1665,8 @@ function App() {
     setScope: setScope,
     grouping: grouping,
     setGrouping: setGrouping,
+    creditView: creditView,
+    setCreditView: setCreditView,
     filters: filters,
     setFilters: setFilters
   });
@@ -1673,6 +1677,8 @@ function ARDashboard({
   setScope,
   grouping,
   setGrouping,
+  creditView,
+  setCreditView,
   filters,
   setFilters
 }) {
@@ -1709,7 +1715,11 @@ function ARDashboard({
           outstanding: 0,
           originalAmount: +r.order_total || 0,
           paymentBalance: +r.payment_balance || 0,
-          credits: +r.credits || 0
+          credits: +r.credits || 0,
+          // A credit shows up as a reduction in the balance owed, exactly like a
+          // payment. So if the balance still equals the full invoice amount,
+          // nothing has been applied and the credit is still sitting unused.
+          creditApplied: (+r.order_total || 0) - (+r.payment_balance || 0) > 0.01
         };
       }
       r._primaries.forEach(b => m[id].brands.add(b));
@@ -1854,7 +1864,13 @@ function ARDashboard({
   // Active credits = credits still sitting on an OPEN (unpaid) invoice.
   // allInvoices already drops anything marked paid, so a positive credit here
   // is one that hasn't been settled yet.
-  const activeCredits = useMemo(() => filtered.filter(o => o.credits > 0).sort((a, b) => b.credits - a.credits), [filtered]);
+  const creditsAll = useMemo(() => filtered.filter(o => o.credits > 0).sort((a, b) => b.credits - a.credits), [filtered]);
+  const creditCounts = useMemo(() => ({
+    all: creditsAll.length,
+    unapplied: creditsAll.filter(o => !o.creditApplied).length,
+    applied: creditsAll.filter(o => o.creditApplied).length
+  }), [creditsAll]);
+  const activeCredits = useMemo(() => creditView === 'unapplied' ? creditsAll.filter(o => !o.creditApplied) : creditView === 'applied' ? creditsAll.filter(o => o.creditApplied) : creditsAll, [creditsAll, creditView]);
   const activeCreditTotal = useMemo(() => activeCredits.reduce((s, o) => s + o.credits, 0), [activeCredits]);
   const reset = () => setFilters({
     rep: '',
@@ -2228,9 +2244,30 @@ function ARDashboard({
     className: "section-header"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "section-title"
-  }, "Active ", /*#__PURE__*/React.createElement("em", null, "credits")), /*#__PURE__*/React.createElement("span", {
+  }, "Active ", /*#__PURE__*/React.createElement("em", null, "credits")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: 14,
+      flexWrap: 'wrap'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "aging-btns"
+  }, [['all', 'All'], ['unapplied', 'Not applied'], ['applied', 'Applied']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+    key: k,
+    className: 'aging-btn' + (creditView === k ? ' aging-btn-active' : ''),
+    style: creditView === k ? {
+      background: 'var(--accent-deep)',
+      borderColor: 'var(--accent)',
+      color: '#fff'
+    } : {
+      borderColor: 'var(--border)',
+      color: 'var(--text-dim)'
+    },
+    onClick: () => setCreditView(k)
+  }, l, " (", fmtNum(creditCounts[k]), ")"))), /*#__PURE__*/React.createElement("span", {
     className: "section-meta"
-  }, fmtNum(activeCredits.length), " invoices \u00b7 ", fmtMoneyFull(activeCreditTotal), " outstanding credit")), /*#__PURE__*/React.createElement("div", {
+  }, fmtNum(activeCredits.length), " invoices \u00b7 ", fmtMoneyFull(activeCreditTotal), " credit"))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 0,
@@ -2247,7 +2284,7 @@ function ARDashboard({
     className: "num"
   }, "Original"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Remaining"), /*#__PURE__*/React.createElement("th", {
+  }, "Remaining"), /*#__PURE__*/React.createElement("th", null, "Applied?"), /*#__PURE__*/React.createElement("th", {
     className: "num"
   }, "Credit"))), /*#__PURE__*/React.createElement("tbody", null, activeCredits.slice(0, 200).map((o, i) => /*#__PURE__*/React.createElement("tr", {
     key: i
@@ -2282,12 +2319,21 @@ function ARDashboard({
     className: "num dim"
   }, fmtMoneyFull(o.originalAmount)), /*#__PURE__*/React.createElement("td", {
     className: "num dim"
-  }, fmtMoneyFull(o.paymentBalance)), /*#__PURE__*/React.createElement("td", {
+  }, fmtMoneyFull(o.paymentBalance)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    className: "pill",
+    style: o.creditApplied ? {
+      color: 'var(--text-dim)',
+      borderColor: 'var(--border)'
+    } : {
+      color: '#d6433f',
+      borderColor: '#d6433f'
+    }
+  }, o.creditApplied ? 'Applied' : 'Not applied')), /*#__PURE__*/React.createElement("td", {
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.credits)))))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     className: "totals-row"
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 8
+    colSpan: 9
   }, "Total \u00b7 ", fmtNum(activeCredits.length), " credits"), /*#__PURE__*/React.createElement("td", {
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(activeCreditTotal))))))))), /*#__PURE__*/React.createElement(StickyFooter, {
