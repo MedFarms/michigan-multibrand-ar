@@ -33,6 +33,14 @@ ENDPOINT = os.getenv("LEAFLINK_ENDPOINT", "/api/v2/orders-received/")
 # Customers endpoint — used to enrich orders with the assigned sales rep (and
 # state/license when present), since the orders feed doesn't carry them.
 CUSTOMERS_ENDPOINT = os.getenv("LEAFLINK_CUSTOMERS_ENDPOINT", "/api/v2/customers/")
+
+# Financial credits. The order object carries only a rolled-up `credits` amount;
+# the credits endpoint carries the real records, each with its own status
+# (Active / Used), reason and date - which is what the AR dashboard needs to
+# tell an unspent credit from a spent one. Fail-safe: if the App lacks the
+# permission or the path differs, the scraper logs it and carries on.
+CREDITS_ENDPOINT = os.getenv("LEAFLINK_CREDITS_ENDPOINT", "/api/v2/credits/")
+PULL_CREDITS = os.getenv("LEAFLINK_PULL_CREDITS", "1") != "0"
 # Customers carry the assigned rep as the `managers` field — a list of user IDs.
 # These endpoints (tried in order) resolve those IDs to rep names.
 USERS_ENDPOINTS = [e.strip() for e in os.getenv(
@@ -546,6 +554,72 @@ def fetch_customers():
         resp = _get(nxt, None)
         if resp.status_code != 200:
             break
+    return out
+
+
+def fetch_credits():
+    """Page through the credits endpoint. Returns [] on any failure (fail-safe).
+
+    Field names on the credit object are not documented publicly, so this keeps
+    the raw record and logs the key names on the first run - that way the exact
+    shape can be confirmed from the workflow log without guessing.
+    """
+    if not API_KEY or not PULL_CREDITS:
+        return []
+    url = f"{API_BASE}{CREDITS_ENDPOINT}"
+    params = {"page_size": PAGE_SIZE, "page": 1}
+    if SELLER_ID:
+        params["company"] = SELLER_ID
+    resp = _get(url, params)
+    if resp.status_code in (400, 403, 404):
+        print(f"  NOTE: {resp.status_code} on {CREDITS_ENDPOINT} — the App may lack "
+              "'Credits' read permission, or the path/filter differs. Set "
+              "LEAFLINK_CREDITS_ENDPOINT, or LEAFLINK_PULL_CREDITS=0 to silence. "
+              "Falling back to the rolled-up credit amount on each order.")
+        return []
+    if resp.status_code != 200:
+        print(f"  NOTE: credits endpoint returned {resp.status_code}; skipping.")
+        return []
+    out = []
+    while True:
+        data = resp.json()
+        batch = data.get("results", data if isinstance(data, list) else [])
+        out.extend(batch)
+        nxt = data.get("next") if isinstance(data, dict) else None
+        if not nxt:
+            break
+        resp = _get(nxt, None)
+        if resp.status_code != 200:
+            break
+    if out:
+        print(f"  Credits fetched: {len(out)} | fields on first record: "
+              f"{sorted(out[0].keys())}")
+    return out
+
+
+def normalize_credits(raw):
+    """Reduce raw credit records to the handful of fields the dashboard uses.
+
+    Field names are matched loosely because the exact spelling is unconfirmed;
+    anything not found is left blank rather than guessed at.
+    """
+    out = []
+    for c in raw:
+        if not isinstance(c, dict):
+            continue
+        amount = _amount(_first(c, "amount", "value", "credit", "total"))
+        status = _first(c, "status", "state", "credit_status")
+        status = _name_of(status) if status is not None else ""
+        order = _first(c, "order", "order_id", "order_number", "purchase_order")
+        out.append({
+            "id": _first(c, "id", "uuid", "number") or "",
+            "order": _name_of(order) if order is not None else "",
+            "amount": amount if amount is not None else 0.0,
+            "status": str(status or "").strip(),
+            "reason": str(_name_of(_first(c, "reason", "type", "credit_type", "category")) or "").strip(),
+            "note": str(_first(c, "note", "notes", "description", "memo") or "").strip(),
+            "date": _date_key(str(_first(c, "created_on", "created", "date", "created_at") or "")) or "",
+        })
     return out
 
 
@@ -1118,6 +1192,9 @@ def main():
     # Enrich with sales rep (and state/license when available) from customers.
     print(f"Fetching customers from {CUSTOMERS_ENDPOINT} for sales-rep enrichment...")
     customers = fetch_customers()
+    print(f"Fetching financial credits from {CREDITS_ENDPOINT}...")
+    credits_raw = fetch_credits()
+    credits_norm = normalize_credits(credits_raw)
     print("Resolving rep names from users endpoint(s)...")
     user_map = fetch_users() if customers else {}
     enrich = build_enrichment(customers, user_map)
@@ -1194,6 +1271,11 @@ def main():
     print(f"\nSeller id(s) seen: {st['seller_ids']}  (Medfarms = 9105)")
     print(f"Company filter: seller {SELLER_ID or '(none)'}  ->  skipped {st['skipped_company']} other-company orders")
     print(f"Status filter: excluded {EXCLUDE_STATUSES or '(none)'}  ->  skipped {st['skipped_status']} orders")
+    if credits_raw:
+        _cs = {}
+        for _c in credits_norm:
+            _cs[_c["status"] or "(blank)"] = _cs.get(_c["status"] or "(blank)", 0) + 1
+        print(f"Credits: {len(credits_norm)} records  |  by status: {_cs}")
     print(f"Brand id(s) in data:  {st['brand_ids']}   (Chill Medicated = 2425)")
     print(f"Date floor: {FROM_DATE or '(none)'}  ->  skipped {st['skipped_old']} older orders")
     if HOME_STATE:
@@ -1220,6 +1302,10 @@ def main():
         "order_count": len({str(r.get("order_uid")) for r in rows if r.get("order_uid")}),
         "row_count": len(rows),
         "inventory": (inv or {}).get("catalog", []),
+        # Real credit records with their own Active/Used status. Empty when the
+        # endpoint isn't reachable; the dashboard falls back to the rolled-up
+        # per-order amount in that case.
+        "credits": credits_norm,
         "rows": rows,
     }
     with gzip.open(OUTPUT_FILE, "wt", encoding="utf-8") as f:
