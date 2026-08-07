@@ -1865,7 +1865,54 @@ function ARDashboard({
   // Active credits = credits still sitting on an OPEN (unpaid) invoice.
   // allInvoices already drops anything marked paid, so a positive credit here
   // is one that hasn't been settled yet.
-  const creditsAll = useMemo(() => filtered.filter(o => o.credits > 0).sort((a, b) => b.credits - a.credits), [filtered]);
+  // Credits come from LeafLink's own credits endpoint, which carries the real
+  // per-credit status (Active / Used / Cancelled), reason and date. The rolled-up
+  // `credits` amount on an order is NOT reliable for this - it reads 0 on orders
+  // that demonstrably carry a credit - so it is only used as a fallback when the
+  // feed predates the credits pull.
+  const invoiceUid = useMemo(() => {
+    const m = {};
+    normalized.forEach(r => {
+      const n = String(r.order_number || '').trim();
+      if (n && !m[n]) m[n] = r.order_uid || null;
+    });
+    return m;
+  }, [normalized]);
+  const creditsAll = useMemo(() => {
+    const src = data.credits;
+    if (Array.isArray(src) && src.length) {
+      return src
+        // Archived and cancelled credits are dead records, not money owed.
+        .filter(c => !c.archived && c.status !== 'cancelled')
+        .filter(c => !filters.buyer.length || filters.buyer.indexOf(c.buyer) !== -1)
+        .filter(c => !filters.brand || c.brand === filters.brand)
+        .filter(c => matchesSearch(filters.search, (c.invoice || '') + ' ' + (c.buyer || '') + ' ' + (c.reason || '')))
+        .map(c => ({
+          invoice: c.invoice || '\u2014',
+          order_uid: invoiceUid[c.invoice] || null,
+          buyer: c.buyer || '\u2014',
+          brand: c.brand || '',
+          reason: c.reason || '\u2014',
+          date: c.date || '\u2014',
+          credits: +c.amount || 0,
+          creditApplied: c.status === 'used',
+          statusLabel: c.status_label || (c.status === 'used' ? 'Used' : 'Active')
+        }))
+        .sort((a, b) => b.date.localeCompare(a.date) || b.credits - a.credits);
+    }
+    // Fallback for an older feed with no credits array.
+    return filtered.filter(o => o.credits > 0).map(o => ({
+      invoice: o.invoice,
+      order_uid: o.order_uid,
+      buyer: o.buyer,
+      brand: '',
+      reason: '\u2014',
+      date: o.date,
+      credits: o.credits,
+      creditApplied: o.creditApplied,
+      statusLabel: o.creditApplied ? 'Used' : 'Active'
+    })).sort((a, b) => b.credits - a.credits);
+  }, [data, filtered, filters, invoiceUid]);
   const creditCounts = useMemo(() => ({
     all: creditsAll.length,
     unapplied: creditsAll.filter(o => !o.creditApplied).length,
@@ -2281,11 +2328,7 @@ function ARDashboard({
     }
   }, /*#__PURE__*/React.createElement("table", {
     className: "data-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", null, "Invoice"), /*#__PURE__*/React.createElement("th", null, "Due"), /*#__PURE__*/React.createElement("th", null, "Aging"), /*#__PURE__*/React.createElement("th", {
-    className: "num"
-  }, "Original"), /*#__PURE__*/React.createElement("th", {
-    className: "num"
-  }, "Remaining"), /*#__PURE__*/React.createElement("th", null, "Status"), /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Brand"), /*#__PURE__*/React.createElement("th", null, "Reason"), /*#__PURE__*/React.createElement("th", null, "Credit date"), /*#__PURE__*/React.createElement("th", null, "Status"), /*#__PURE__*/React.createElement("th", {
     className: "num"
   }, "Credit"))), /*#__PURE__*/React.createElement("tbody", null, activeCredits.slice(0, 200).map((o, i) => /*#__PURE__*/React.createElement("tr", {
     key: i
@@ -2304,23 +2347,16 @@ function ARDashboard({
       borderBottom: '1px dotted var(--accent)'
     },
     title: "Open order in LeafLink"
-  }, o.invoice) : o.invoice), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", {
+  }, o.invoice) : o.invoice), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", null, o.brand ? /*#__PURE__*/React.createElement("span", {
+    className: "chip",
+    style: brandChip(o.brand)
+  }, brandLabel(o.brand)) : /*#__PURE__*/React.createElement("span", {
     className: "dim"
-  }, o.rep), /*#__PURE__*/React.createElement("td", {
+  }, "\u2014")), /*#__PURE__*/React.createElement("td", {
+    className: "dim"
+  }, o.reason), /*#__PURE__*/React.createElement("td", {
     className: "dim font-mono"
-  }, o.date), /*#__PURE__*/React.createElement("td", {
-    className: "dim font-mono"
-  }, o.due), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
-    className: "pill",
-    style: {
-      color: o.bucket.color,
-      borderColor: o.bucket.color
-    }
-  }, o.bucket.label)), /*#__PURE__*/React.createElement("td", {
-    className: "num dim"
-  }, fmtMoneyFull(o.originalAmount)), /*#__PURE__*/React.createElement("td", {
-    className: "num dim"
-  }, fmtMoneyFull(o.paymentBalance)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+  }, o.date), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
     className: "pill",
     style: o.creditApplied ? {
       color: 'var(--text-faint)',
@@ -2329,12 +2365,12 @@ function ARDashboard({
       color: '#2e9e57',
       borderColor: '#2e9e57'
     }
-  }, o.creditApplied ? 'Used' : 'Active')), /*#__PURE__*/React.createElement("td", {
+  }, o.statusLabel)), /*#__PURE__*/React.createElement("td", {
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.credits)))))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     className: "totals-row"
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 9
+    colSpan: 6
   }, "Total \u00b7 ", fmtNum(activeCredits.length), " credits"), /*#__PURE__*/React.createElement("td", {
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(activeCreditTotal))))))))), /*#__PURE__*/React.createElement(StickyFooter, {
