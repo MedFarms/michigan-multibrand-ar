@@ -1888,7 +1888,8 @@ function ARDashboard({
         .filter(c => !filters.brand || c.brand === filters.brand)
         .filter(c => matchesSearch(filters.search, (c.invoice || '') + ' ' + (c.buyer || '') + ' ' + (c.reason || '')))
         .map(c => ({
-          invoice: c.invoice || '\u2014',
+          // "Applies To" - empty while a credit is still Active.
+          invoice: c.invoice || '',
           order_uid: invoiceUid[c.invoice] || null,
           buyer: c.buyer || '\u2014',
           brand: c.brand || '',
@@ -2315,7 +2316,7 @@ function ARDashboard({
     onClick: () => setCreditView(k)
   }, l, " (", fmtNum(creditCounts[k]), ")"))), /*#__PURE__*/React.createElement("span", {
     className: "section-meta"
-  }, fmtNum(activeCredits.length), " invoices \u00b7 ", fmtMoneyFull(activeCreditTotal), " credit"))), /*#__PURE__*/React.createElement("div", {
+  }, fmtNum(activeCredits.length), " credits \u00b7 ", fmtMoneyFull(activeCreditTotal), " total"))), /*#__PURE__*/React.createElement("div", {
     className: "card",
     style: {
       padding: 0,
@@ -2328,16 +2329,18 @@ function ARDashboard({
     }
   }, /*#__PURE__*/React.createElement("table", {
     className: "data-table"
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Brand"), /*#__PURE__*/React.createElement("th", null, "Reason"), /*#__PURE__*/React.createElement("th", null, "Credit date"), /*#__PURE__*/React.createElement("th", null, "Status"), /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Applies to"), /*#__PURE__*/React.createElement("th", null, "Customer"), /*#__PURE__*/React.createElement("th", null, "Brand"), /*#__PURE__*/React.createElement("th", null, "Reason"), /*#__PURE__*/React.createElement("th", null, "Credit date"), /*#__PURE__*/React.createElement("th", null, "Status"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Credit"))), /*#__PURE__*/React.createElement("tbody", null, activeCredits.slice(0, 200).map((o, i) => /*#__PURE__*/React.createElement("tr", {
+  }, "Amount"))), /*#__PURE__*/React.createElement("tbody", null, activeCredits.slice(0, 200).map((o, i) => /*#__PURE__*/React.createElement("tr", {
     key: i
   }, /*#__PURE__*/React.createElement("td", {
     className: "font-mono",
     style: {
       color: 'var(--accent)'
     }
-  }, o.order_uid ? /*#__PURE__*/React.createElement("a", {
+  }, !o.invoice || o.invoice === '\u2014' ? /*#__PURE__*/React.createElement("span", {
+    className: "dim"
+  }, "\u2014") : o.order_uid ? /*#__PURE__*/React.createElement("a", {
     href: 'https://app.leaflink.com/c/3843-Euclid/orders/' + o.order_uid + '/summary/',
     target: "_blank",
     rel: "noopener noreferrer",
