@@ -598,27 +598,35 @@ def fetch_credits():
 
 
 def normalize_credits(raw):
-    """Reduce raw credit records to the handful of fields the dashboard uses.
+    """Reduce raw credit records to the fields the dashboard uses.
 
-    Field names are matched loosely because the exact spelling is unconfirmed;
-    anything not found is left blank rather than guessed at.
+    Confirmed field names from the live endpoint:
+      amount, status ('active' | 'used' | 'cancelled'), status_display,
+      reason, reason_display, credit_date, order (numeric id),
+      order_display (the f-number shown in the UI), customer, brand,
+      notes, archived.
     """
     out = []
     for c in raw:
         if not isinstance(c, dict):
             continue
-        amount = _amount(_first(c, "amount", "value", "credit", "total"))
-        status = _first(c, "status", "state", "credit_status")
-        status = _name_of(status) if status is not None else ""
-        order = _first(c, "order", "order_id", "order_number", "purchase_order")
+        amount = _amount(c.get("amount"))
         out.append({
-            "id": _first(c, "id", "uuid", "number") or "",
-            "order": _name_of(order) if order is not None else "",
+            "id": c.get("id"),
+            # order_display is the human invoice number (e.g. f8401414); `order`
+            # is LeafLink's internal numeric id.
+            "invoice": str(c.get("order_display") or "").strip(),
+            "order_id": c.get("order"),
+            "buyer": _name_of(c.get("customer")) or "",
+            "brand": _name_of(c.get("brand")) or "",
             "amount": amount if amount is not None else 0.0,
-            "status": str(status or "").strip(),
-            "reason": str(_name_of(_first(c, "reason", "type", "credit_type", "category")) or "").strip(),
-            "note": str(_first(c, "note", "notes", "description", "memo") or "").strip(),
-            "date": _date_key(str(_first(c, "created_on", "created", "date", "created_at") or "")) or "",
+            # status is the machine value; status_display is what the UI shows.
+            "status": str(c.get("status") or "").strip().lower(),
+            "status_label": str(c.get("status_display") or c.get("status") or "").strip(),
+            "reason": str(c.get("reason_display") or c.get("reason") or "").strip(),
+            "note": str(c.get("notes") or "").strip(),
+            "date": _date_key(str(c.get("credit_date") or "")) or "",
+            "archived": bool(c.get("archived")),
         })
     return out
 
