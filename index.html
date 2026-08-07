@@ -1717,8 +1717,9 @@ function ARDashboard({
           paymentBalance: +r.payment_balance || 0,
           credits: +r.credits || 0,
           // A credit shows up as a reduction in the balance owed, exactly like a
-          // payment. So if the balance still equals the full invoice amount,
-          // nothing has been applied and the credit is still sitting unused.
+          // payment. If the balance still equals the full invoice amount the
+          // credit has not been drawn down yet - it is ACTIVE. Once the balance
+          // drops below the invoice amount the credit has been USED.
           creditApplied: (+r.order_total || 0) - (+r.payment_balance || 0) > 0.01
         };
       }
@@ -2253,7 +2254,7 @@ function ARDashboard({
     }
   }, /*#__PURE__*/React.createElement("div", {
     className: "aging-btns"
-  }, [['all', 'All'], ['unapplied', 'Not applied'], ['applied', 'Applied']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
+  }, [['all', 'All'], ['unapplied', 'Active'], ['applied', 'Used']].map(([k, l]) => /*#__PURE__*/React.createElement("button", {
     key: k,
     className: 'aging-btn' + (creditView === k ? ' aging-btn-active' : ''),
     style: creditView === k ? {
@@ -2284,7 +2285,7 @@ function ARDashboard({
     className: "num"
   }, "Original"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Remaining"), /*#__PURE__*/React.createElement("th", null, "Applied?"), /*#__PURE__*/React.createElement("th", {
+  }, "Remaining"), /*#__PURE__*/React.createElement("th", null, "Status"), /*#__PURE__*/React.createElement("th", {
     className: "num"
   }, "Credit"))), /*#__PURE__*/React.createElement("tbody", null, activeCredits.slice(0, 200).map((o, i) => /*#__PURE__*/React.createElement("tr", {
     key: i
@@ -2322,13 +2323,13 @@ function ARDashboard({
   }, fmtMoneyFull(o.paymentBalance)), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
     className: "pill",
     style: o.creditApplied ? {
-      color: 'var(--text-dim)',
+      color: 'var(--text-faint)',
       borderColor: 'var(--border)'
     } : {
-      color: '#d6433f',
-      borderColor: '#d6433f'
+      color: '#2e9e57',
+      borderColor: '#2e9e57'
     }
-  }, o.creditApplied ? 'Applied' : 'Not applied')), /*#__PURE__*/React.createElement("td", {
+  }, o.creditApplied ? 'Used' : 'Active')), /*#__PURE__*/React.createElement("td", {
     className: "num"
   }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.credits)))))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     className: "totals-row"
