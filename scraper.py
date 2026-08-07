@@ -613,10 +613,16 @@ def normalize_credits(raw):
         amount = _amount(c.get("amount"))
         out.append({
             "id": c.get("id"),
-            # order_display is the human invoice number (e.g. f8401414); `order`
-            # is LeafLink's internal numeric id.
-            "invoice": str(c.get("order_display") or "").strip(),
-            "order_id": c.get("order"),
+            # Two different order references, matching the two columns in
+            # LeafLink's Credits table:
+            #   order / order_display        -> "Credited From" (the order the
+            #                                   credit was raised against)
+            #   applied_to / applied_to_display -> "Applies To" (the invoice the
+            #                                   credit was actually spent on;
+            #                                   blank while the credit is Active)
+            "invoice": str(c.get("applied_to_display") or "").strip(),
+            "credited_from": str(c.get("order_display") or "").strip(),
+            "order_id": c.get("applied_to") or c.get("order"),
             "buyer": _name_of(c.get("customer")) or "",
             "brand": _name_of(c.get("brand")) or "",
             "amount": amount if amount is not None else 0.0,
