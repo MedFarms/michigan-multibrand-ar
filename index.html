@@ -262,6 +262,12 @@
 
   /* Status pill */
   .pill { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; padding: 3px 8px; border-radius: 2px; border: 1px solid; }
+  /* Footer totals row on the open-invoice table — pinned so it stays visible
+     while the invoice list scrolls. */
+  .data-table tfoot .totals-row td { position: sticky; bottom: 0; background: var(--bg-elev-2);
+    border-top: 2px solid var(--border); font-weight: 600; padding-top: 12px; padding-bottom: 12px; }
+  .data-table tfoot .totals-row td:first-child { font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
   .pill-completed { color: var(--accent); border-color: var(--accent-dim); background: rgba(124,58,237,0.08); }
   .pill-pending { color: var(--warm); border-color: var(--warm); background: rgba(199,125,34,0.12); }
   .pill-overdue { color: var(--rose); border-color: var(--rose); background: rgba(214,69,127,0.12); }
@@ -845,11 +851,17 @@ const textOn = hex => {
   return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#15241a' : '#ffffff';
 };
 
-// Aging color scheme (client spec): Current green, 31-60 yellow, 61-90 orange, 91+ red
+// Aging colour scheme: Current green, 1-30 lime, 31-60 yellow, 61-90 orange, 91+ red.
+// "Current" means the due date has NOT passed yet (days past due <= 0); anything
+// at 1 day or more is overdue and lands in one of the aged buckets.
 const AGING = [{
   key: 'current',
   label: 'Current',
   color: '#2e9e57'
+}, {
+  key: 'b1',
+  label: '1–30 days',
+  color: '#93a524'
 }, {
   key: 'b31',
   label: '31–60 days',
@@ -863,10 +875,11 @@ const AGING = [{
   label: '91+ days',
   color: '#d6433f'
 }];
-const agingBucket = days => days <= 30 ? AGING[0] : days <= 60 ? AGING[1] : days <= 90 ? AGING[2] : AGING[3];
+const agingBucket = days => days <= 0 ? AGING[0] : days <= 30 ? AGING[1] : days <= 60 ? AGING[2] : days <= 90 ? AGING[3] : AGING[4];
 // "Last Order Date" segment labels (same buckets/colors as AGING)
 const RECENCY_LABEL = {
-  current: '30 days',
+  current: 'not yet due',
+  b1: '30 days',
   b31: '60 days',
   b61: '90 days',
   b91: '90+ days'
@@ -1784,6 +1797,25 @@ function ARDashboard({
   const sorted = useMemo(() => filtered.slice().sort((a, b) => b.days - a.days), [filtered]);
   const buyerPager = usePager(byBuyer, 12);
   const invPager = usePager(sorted, 25);
+
+  // Footer totals for the open-invoice table. These cover the WHOLE filtered
+  // set, not just the visible page, so the figure matches the KPI cards above.
+  const invTotals = useMemo(() => sorted.reduce((a, o) => {
+    a.original += o.originalAmount;
+    a.payments += Math.max(0, o.originalAmount - o.paymentBalance);
+    a.remaining += o.paymentBalance;
+    return a;
+  }, {
+    original: 0,
+    payments: 0,
+    remaining: 0
+  }), [sorted]);
+
+  // Active credits = credits still sitting on an OPEN (unpaid) invoice.
+  // allInvoices already drops anything marked paid, so a positive credit here
+  // is one that hasn't been settled yet.
+  const activeCredits = useMemo(() => filtered.filter(o => o.credits > 0).sort((a, b) => b.credits - a.credits), [filtered]);
+  const activeCreditTotal = useMemo(() => activeCredits.reduce((s, o) => s + o.credits, 0), [activeCredits]);
   const reset = () => setFilters({
     rep: '',
     buyer: [],
@@ -2060,7 +2092,7 @@ function ARDashboard({
       { key: o => (o.brands || []).join('; '), label: 'Brands' },
       { key: 'date', label: 'Invoice Date' },
       { key: 'due', label: 'Due Date' },
-      { key: 'days', label: 'Days Past' },
+      { key: 'days', label: 'Days Past Due' },
       { key: o => o.bucket && o.bucket.label, label: 'Aging' },
       { key: 'originalAmount', label: 'Original', fmt: v => (+v || 0).toFixed(2) },
       { key: o => Math.max(0, (o.originalAmount || 0) - (o.paymentBalance || 0)), label: 'Payments', fmt: v => (+v || 0).toFixed(2) },
@@ -2089,7 +2121,7 @@ function ARDashboard({
     className: "data-table"
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", null, "Brands"), /*#__PURE__*/React.createElement("th", null, "Invoice"), /*#__PURE__*/React.createElement("th", null, "Due"), /*#__PURE__*/React.createElement("th", {
     className: "num"
-  }, "Days Past"), /*#__PURE__*/React.createElement("th", null, "Aging"), /*#__PURE__*/React.createElement("th", {
+  }, "Days Past Due"), /*#__PURE__*/React.createElement("th", null, "Aging"), /*#__PURE__*/React.createElement("th", {
     className: "num"
   }, "Original"), /*#__PURE__*/React.createElement("th", {
     className: "num"
@@ -2135,9 +2167,87 @@ function ARDashboard({
     className: "num dim"
   }, fmtMoneyFull(Math.max(0, o.originalAmount - o.paymentBalance))), /*#__PURE__*/React.createElement("td", {
     className: "num"
-  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.paymentBalance)))))))), /*#__PURE__*/React.createElement(Pager, {
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.paymentBalance)))))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
+    className: "totals-row"
+  }, /*#__PURE__*/React.createElement("td", {
+    colSpan: 8
+  }, "Total \u00b7 ", fmtNum(sorted.length), " open invoices"), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, fmtMoneyFull(invTotals.original)), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, fmtMoneyFull(invTotals.payments)), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(invTotals.remaining))))))), /*#__PURE__*/React.createElement(Pager, {
     pager: invPager
-  }))), /*#__PURE__*/React.createElement(StickyFooter, {
+  }))), activeCredits.length > 0 && /*#__PURE__*/React.createElement("section", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "section-header"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "section-title"
+  }, "Active ", /*#__PURE__*/React.createElement("em", null, "credits")), /*#__PURE__*/React.createElement("span", {
+    className: "section-meta"
+  }, fmtNum(activeCredits.length), " invoices \u00b7 ", fmtMoneyFull(activeCreditTotal), " outstanding credit")), /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: {
+      padding: 0,
+      overflow: 'hidden'
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: 'auto',
+      maxHeight: 460
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    className: "data-table"
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Invoice #"), /*#__PURE__*/React.createElement("th", null, "Buyer"), /*#__PURE__*/React.createElement("th", null, "Rep"), /*#__PURE__*/React.createElement("th", null, "Invoice"), /*#__PURE__*/React.createElement("th", null, "Due"), /*#__PURE__*/React.createElement("th", null, "Aging"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Original"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Remaining"), /*#__PURE__*/React.createElement("th", {
+    className: "num"
+  }, "Credit"))), /*#__PURE__*/React.createElement("tbody", null, activeCredits.slice(0, 200).map((o, i) => /*#__PURE__*/React.createElement("tr", {
+    key: i
+  }, /*#__PURE__*/React.createElement("td", {
+    className: "font-mono",
+    style: {
+      color: 'var(--accent)'
+    }
+  }, o.order_uid ? /*#__PURE__*/React.createElement("a", {
+    href: 'https://app.leaflink.com/c/3843-Euclid/orders/' + o.order_uid + '/summary/',
+    target: "_blank",
+    rel: "noopener noreferrer",
+    style: {
+      color: 'var(--accent)',
+      textDecoration: 'none',
+      borderBottom: '1px dotted var(--accent)'
+    },
+    title: "Open order in LeafLink"
+  }, o.invoice) : o.invoice), /*#__PURE__*/React.createElement("td", null, o.buyer), /*#__PURE__*/React.createElement("td", {
+    className: "dim"
+  }, o.rep), /*#__PURE__*/React.createElement("td", {
+    className: "dim font-mono"
+  }, o.date), /*#__PURE__*/React.createElement("td", {
+    className: "dim font-mono"
+  }, o.due), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
+    className: "pill",
+    style: {
+      color: o.bucket.color,
+      borderColor: o.bucket.color
+    }
+  }, o.bucket.label)), /*#__PURE__*/React.createElement("td", {
+    className: "num dim"
+  }, fmtMoneyFull(o.originalAmount)), /*#__PURE__*/React.createElement("td", {
+    className: "num dim"
+  }, fmtMoneyFull(o.paymentBalance)), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(o.credits)))))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
+    className: "totals-row"
+  }, /*#__PURE__*/React.createElement("td", {
+    colSpan: 8
+  }, "Total \u00b7 ", fmtNum(activeCredits.length), " credits"), /*#__PURE__*/React.createElement("td", {
+    className: "num"
+  }, /*#__PURE__*/React.createElement("strong", null, fmtMoneyFull(activeCreditTotal))))))))), /*#__PURE__*/React.createElement(StickyFooter, {
     nav: NAV,
     active: ACTIVE,
     brands: distinct.brands,
