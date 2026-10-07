@@ -1306,6 +1306,17 @@ def main():
           f"(ratio {ratio:.4f}; should be ~1.0000)")
     print(f"  gross (list price) was ${gt:,.2f} -> order-level discounts/adj ${gt-nt:,.2f}")
 
+    # AR dashboard only shows OPEN (unpaid) invoices — it discards paid orders on
+    # load (if (r.paid === true) return). Drop paid rows here so the committed file
+    # stays ~1/5 the size and the dashboard loads fast. Applied to kept+fresh
+    # together, so an order that flips unpaid->paid is removed, never left stale.
+    # LEAFLINK_AR_UNPAID_ONLY=0 disables this (keeps all rows) if ever needed.
+    if os.getenv("LEAFLINK_AR_UNPAID_ONLY", "1") != "0":
+        _before = len(rows)
+        rows = [r for r in rows if not r.get("paid")]
+        print(f"AR unpaid-only filter: {_before} rows -> {len(rows)} unpaid "
+              f"(dropped {_before - len(rows)} paid rows).")
+
     payload = {
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "source": "leaflink",
