@@ -46,9 +46,18 @@ jobs:
           LEAFLINK_API_KEY: ${{ secrets.LEAFLINK_API_KEY }}
           LEAFLINK_SELLER_ID: '9105'
           LEAFLINK_BRAND: ''
-          LEAFLINK_FROM_DATE: '2020-01-01'
+          # AR only displays invoices from 2025-01-01 onward (the dashboard floors
+          # everything older), so the pull is bounded to 2025+. Keeping this at
+          # 2020 made the weekly full backfill scan ~7 years of every paid+unpaid
+          # order every Sunday - too big to finish - so paid invoices were never
+          # re-checked and never dropped, and the file only ever grew. At 2025 the
+          # full backfill completes and purges paid orders each run. Changing this
+          # value also forces ONE clean full rebuild on the next run (the committed
+          # file was backfilled at 2020, which no longer matches), clearing the
+          # backlog of stale "open" invoices that are actually paid.
+          LEAFLINK_FROM_DATE: '2025-01-01'
           # Incremental mode: pull only the last N days and merge into the
-          # committed file instead of rescanning 2020->today on every run. The
+          # committed file instead of rescanning from scratch on every run. The
           # scraper still does a full backfill on the first run, or any run where
           # the committed data isn't yet complete back to LEAFLINK_FROM_DATE.
           #
