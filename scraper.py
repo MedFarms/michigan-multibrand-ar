@@ -71,6 +71,30 @@ FROM_DATE = os.getenv("LEAFLINK_FROM_DATE", "2025-01-01")
 # committed data isn't yet backfilled at FROM_DATE) does a one-time FULL pull.
 INCREMENTAL_DAYS = int(os.getenv("LEAFLINK_INCREMENTAL_DAYS", "0"))
 
+# --- Payment-status freshness fix -------------------------------------------
+# The incremental window above filters by created_on, so an order that was
+# CREATED weeks ago but PAID recently (normal with Net-30 terms) ages out of the
+# window and is never re-fetched — its paid/payment_status/payment_balance freeze
+# at the old "unpaid/overdue" state and it lingers on the AR dashboard forever.
+# To fix that, each incremental run ALSO re-pulls orders whose LAST-MODIFIED
+# timestamp is within the last N days (paying an order bumps that timestamp), and
+# merges them so the stale row is replaced. 0 disables this refresh pass.
+MODIFIED_REFRESH_DAYS = int(os.getenv("LEAFLINK_MODIFIED_REFRESH_DAYS", "30"))
+# Candidate server field names for "last modified" on the orders feed, tried in
+# order until one is accepted (not HTTP 400). Confirm the real one from a run log
+# (look for the "modified-refresh via '<field>__gte=...'" line) and pin it here.
+MODIFIED_FIELDS = [f.strip() for f in os.getenv(
+    "LEAFLINK_MODIFIED_FIELDS",
+    "modified_on,modified,last_modified,updated_on,updated"
+).split(",") if f.strip()]
+# Safety bound on the modified-refresh pull (independent of MAX_PAGES), so a
+# mis-named filter that the server silently ignores can't run away.
+MODIFIED_MAX_PAGES = int(os.getenv("LEAFLINK_MODIFIED_MAX_PAGES", "40"))
+# Force a FULL (non-incremental) pull regardless of INCREMENTAL_DAYS. The nightly
+# safety-net workflow sets this so any stale-paid order is fully cleared daily
+# even if the modified-refresh pass can't reach the right field.
+FORCE_FULL = os.getenv("LEAFLINK_FORCE_FULL", "0") == "1"
+
 # Restrict to one company by seller id. Medfarms - 100 Shafer Processing = 9105.
 # The App token is already scoped to a single company, but this enforces it
 # explicitly. Blank = no company filter.
@@ -273,6 +297,61 @@ def fetch_all(start_override: str = "") -> list:
             new += 1
         print(f"  {gte} -> {lt}: {len(batch)} fetched ({new} new) | total {len(orders)}")
     return orders
+
+
+def _fetch_modified(days: int) -> list:
+    """Re-pull orders whose LAST-MODIFIED timestamp is within the last `days`.
+
+    The incremental pull windows on created_on, so an order created long ago but
+    PAID recently never gets re-fetched and its payment status freezes. Paying an
+    order bumps its modified timestamp, so this pass catches exactly those orders
+    (and any whose status changed). Correctness-safe if it over-returns: a row
+    that hasn't changed re-flattens identically; a now-paid order is dropped later
+    by the unpaid-only filter. Fail-safe: tries each candidate modified-field
+    name, and on 400/other errors logs and returns [] so the run still succeeds
+    (the nightly full pull is the backstop).
+    """
+    if not API_KEY or days <= 0:
+        return []
+    gte = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    url = f"{API_BASE}{ENDPOINT}"
+    for field in MODIFIED_FIELDS:
+        params = {"page_size": PAGE_SIZE, "page": 1, f"{field}__gte": gte}
+        if INCLUDE_CHILDREN:
+            params["include_children"] = INCLUDE_CHILDREN
+        resp = _get(url, params)
+        if resp.status_code == 400:
+            print(f"  modified-refresh: server rejected '{field}__gte' (400) — trying next field name")
+            continue
+        if resp.status_code != 200:
+            print(f"  modified-refresh: '{field}' -> HTTP {resp.status_code}; skipping modified pass")
+            return []
+        out, page = [], 0
+        while True:
+            try:
+                data = resp.json()
+            except Exception:
+                break
+            batch = data.get("results", data if isinstance(data, list) else [])
+            out.extend(batch)
+            page += 1
+            nxt = data.get("next") if isinstance(data, dict) else None
+            if not nxt or page >= MODIFIED_MAX_PAGES:
+                if nxt and page >= MODIFIED_MAX_PAGES:
+                    print(f"  modified-refresh: hit MODIFIED_MAX_PAGES={MODIFIED_MAX_PAGES} "
+                          "(raise LEAFLINK_MODIFIED_MAX_PAGES, or the modified field name may be "
+                          "wrong and the filter is being ignored).")
+                break
+            resp = _get(nxt, None)
+            if resp.status_code != 200:
+                print(f"  modified-refresh: page fetch returned {resp.status_code}; using partial ({len(out)}).")
+                break
+        print(f"  modified-refresh via '{field}__gte={gte}': {len(out)} recently-modified order(s)")
+        return out
+    print("  modified-refresh: no accepted modified-date field name "
+          "(set LEAFLINK_MODIFIED_FIELDS to the correct one). Skipping this pass; "
+          "the nightly full pull remains the backstop.")
+    return []
 
 
 # ----------------------------------------------------------------------------
@@ -1188,15 +1267,38 @@ def main():
     # Full vs incremental. Incremental only when enabled AND the committed data was
     # already backfilled at this FROM_DATE, so we never silently skip history.
     existing_rows, existing_from = load_existing()
-    incremental = (INCREMENTAL_DAYS > 0 and bool(existing_rows) and existing_from == FROM_DATE)
+    incremental = (not FORCE_FULL and INCREMENTAL_DAYS > 0
+                   and bool(existing_rows) and existing_from == FROM_DATE)
     if incremental:
         inc_start = (datetime.now() - timedelta(days=INCREMENTAL_DAYS)).strftime("%Y-%m-%d")
         pull_start = max(inc_start, FROM_DATE)
         print(f"INCREMENTAL run: pulling {pull_start} .. today, "
               f"merging into {len(existing_rows)} existing rows (last {INCREMENTAL_DAYS} days).")
         orders = fetch_all(start_override=pull_start)
+        # FIX (frozen payment status): also re-pull orders MODIFIED in the last
+        # MODIFIED_REFRESH_DAYS, so an old order that was just paid gets refreshed
+        # even though its created_on is outside the window above. Merge/dedup into
+        # `orders` so the existing merge logic (fresh_uids -> replace kept row)
+        # drops the stale "open" row automatically and the unpaid-only filter then
+        # removes the now-paid order.
+        if MODIFIED_REFRESH_DAYS > 0:
+            print(f"Refreshing orders modified in the last {MODIFIED_REFRESH_DAYS} days "
+                  "(catches old orders paid after their created-date window)...")
+            mod_orders = _fetch_modified(MODIFIED_REFRESH_DAYS)
+            if mod_orders:
+                _have = {str(o.get("number") or o.get("id")) for o in orders}
+                _added = 0
+                for o in mod_orders:
+                    k = str(o.get("number") or o.get("id"))
+                    if k not in _have:
+                        _have.add(k)
+                        orders.append(o)
+                        _added += 1
+                print(f"  modified-refresh merged {_added} order(s) not in the created window "
+                      f"({len(mod_orders) - _added} already present).")
     else:
-        why = ("incremental disabled (LEAFLINK_INCREMENTAL_DAYS=0)" if INCREMENTAL_DAYS <= 0
+        why = ("forced full pull (LEAFLINK_FORCE_FULL=1)" if FORCE_FULL
+               else "incremental disabled (LEAFLINK_INCREMENTAL_DAYS=0)" if INCREMENTAL_DAYS <= 0
                else "no existing data yet" if not existing_rows
                else f"existing data backfilled at '{existing_from}', need '{FROM_DATE}' — backfilling")
         print(f"FULL pull ({why}).")
