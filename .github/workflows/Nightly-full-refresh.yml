@@ -54,6 +54,26 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sales_data.json.gz
-          git diff --staged --quiet || git commit -m "Nightly full AR refresh [skip ci]"
-          git push
+          # The every-15-min scrape job can push to main while this ~9-min full pull
+          # is running, which makes a plain `git push` fail with "(fetch first)".
+          # Retry loop: on each attempt, reset to the latest remote main, lay OUR
+          # freshly generated file on top, commit, and push. The full refresh is the
+          # authoritative version, so "ours wins" is the correct policy here; the next
+          # incremental run re-adds any brand-new orders 15 min later.
+          cp sales_data.json.gz /tmp/ours.gz
+          for i in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/ours.gz sales_data.json.gz
+            git add sales_data.json.gz
+            if git diff --staged --quiet; then
+              echo "No change vs remote — nothing to commit."; exit 0
+            fi
+            git commit -m "Nightly full AR refresh [skip ci]"
+            if git push; then
+              echo "Pushed on attempt $i."; exit 0
+            fi
+            echo "Push rejected (remote moved); retrying ($i/5)…"
+            sleep $(( (RANDOM % 6) + 3 ))
+          done
+          echo "ERROR: could not push after 5 attempts."; exit 1
